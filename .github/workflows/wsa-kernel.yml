@@ -46,6 +46,8 @@ jobs:
       - name: Checkout KernelSU
         uses: actions/checkout@v4
         with:
+          repository: KernelSU-Next/KernelSU-Next
+          ref: dev
           path: KernelSU
           fetch-depth: 0
 
@@ -69,15 +71,31 @@ jobs:
           echo "[+] KernelSU setup"
           KERNEL_ROOT=$GITHUB_WORKSPACE/WSA-Linux-Kernel
           echo "[+] KERNEL_ROOT: $KERNEL_ROOT"
+
           echo "[+] Copy KernelSU driver to $KERNEL_ROOT/drivers"
           ln -sf $GITHUB_WORKSPACE/KernelSU/kernel $KERNEL_ROOT/drivers/kernelsu
+
           echo "[+] Add KernelSU driver to Makefile"
           DRIVER_MAKEFILE=$KERNEL_ROOT/drivers/Makefile
           DRIVER_KCONFIG=$KERNEL_ROOT/drivers/Kconfig
           grep -q "kernelsu" "$DRIVER_MAKEFILE" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> "$DRIVER_MAKEFILE"
           grep -q "kernelsu" "$DRIVER_KCONFIG" || sed -i "/endmenu/i\\source \"drivers/kernelsu/Kconfig\"" "$DRIVER_KCONFIG"
-          echo "[+] Apply KernelSU patches"
-          cd $KERNEL_ROOT && git apply $GITHUB_WORKSPACE/KernelSU/.github/patches/5.15/*.patch || echo "[-] No patch found"
+
+          PATCH_DIR="$GITHUB_WORKSPACE/KernelSU/.github/patches/5.15"
+          if [ -d "$PATCH_DIR" ]; then
+            shopt -s nullglob
+            PATCHES=("$PATCH_DIR"/*.patch)
+            if [ ${#PATCHES[@]} -gt 0 ]; then
+              echo "[+] Apply KernelSU patches"
+              cd "$KERNEL_ROOT"
+              git apply "${PATCHES[@]}"
+            else
+              echo "[-] No KernelSU 5.15 patches found"
+            fi
+          else
+            echo "[-] No patch directory found at $PATCH_DIR"
+          fi
+
           echo "[+] KernelSU setup done."
           cd $GITHUB_WORKSPACE/KernelSU
           VERSION=$(($(git rev-list --count HEAD) + 10200))
@@ -95,7 +113,7 @@ jobs:
           cp configs/wsa/config-wsa-${ARCH_MAP[${{ inputs.arch }}]} .config
           make olddefconfig
           declare -A FILE_NAME=(["x86_64"]="bzImage" ["arm64"]="Image")
-          make -j`nproc` LLVM=1 ARCH=${{ inputs.arch }} $(if [ "${{ inputs.arch }}" == "arm64" ]; then echo CROSS_COMPILE=aarch64-linux-gnu; fi) ${FILE_NAME[${{ inputs.arch }}]} CCACHE="/usr/bin/ccache"
+          make -j`nproc` LLVM=1 ARCH=${{ inputs.arch }} $(if [ "${{ inputs.arch }}" == "arm64" ]; then echo CROSS_COMPILE=aarch64-linux-gnu; fi) ${FILE_NAME[${{ inputs.arch }}]} CCACHE="/usr/bin/ccache" HOSTCC="gcc" HOSTCFLAGS="-O2 -fcommon"
           declare -A ARCH_MAP_FILE=(["x86_64"]="x86" ["arm64"]="arm64")
           echo "file_path=WSA-Linux-Kernel/arch/${ARCH_MAP_FILE[${{ inputs.arch }}]}/boot/${FILE_NAME[${{ inputs.arch }}]}" >> $GITHUB_ENV
 
