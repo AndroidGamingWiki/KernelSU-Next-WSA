@@ -1,4 +1,4 @@
-name: Build Kernel - WSA selectable
+name: Build Kernel - WSA
 
 on:
   push:
@@ -16,6 +16,15 @@ on:
   workflow_call:
   workflow_dispatch:
     inputs:
+      build_x86_64:
+        description: "Build x86_64"
+        type: boolean
+        default: false
+      build_arm64:
+        description: "Build arm64"
+        type: boolean
+        default: false
+
       build_5_15_94_2:
         description: "Build 5.15.94.2"
         type: boolean
@@ -41,15 +50,24 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
+      arches: ${{ steps.select.outputs.arches }}
       versions: ${{ steps.select.outputs.versions }}
+
     steps:
-      - name: Select kernel versions
+      - name: Select build targets
         id: select
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            versions=()
+            arches=()
+            if [ "${{ inputs.build_x86_64 }}" = "true" ]; then
+              arches+=("x86_64")
+            fi
+            if [ "${{ inputs.build_arm64 }}" = "true" ]; then
+              arches+=("arm64")
+            fi
 
+            versions=()
             if [ "${{ inputs.build_5_15_94_2 }}" = "true" ]; then
               versions+=("5.15.94.2")
             fi
@@ -66,14 +84,21 @@ jobs:
               versions+=("5.15.104.4")
             fi
 
-            if [ ${#versions[@]} -eq 0 ]; then
-              echo "::error::No kernel version selected. Please check at least one box."
+            if [ ${#arches[@]} -eq 0 ]; then
+              echo "::error::No architecture selected. Please check at least one architecture."
               exit 1
             fi
 
+            if [ ${#versions[@]} -eq 0 ]; then
+              echo "::error::No kernel version selected. Please check at least one version."
+              exit 1
+            fi
+
+            printf 'arches=%s\n' "$(printf '%s\n' "${arches[@]}" | jq -R . | jq -s -c)" >> "$GITHUB_OUTPUT"
             printf 'versions=%s\n' "$(printf '%s\n' "${versions[@]}" | jq -R . | jq -s -c)" >> "$GITHUB_OUTPUT"
 
           else
+            printf 'arches=%s\n' '["x86_64","arm64"]' >> "$GITHUB_OUTPUT"
             printf 'versions=%s\n' '["5.15.94.2","5.15.104.1","5.15.104.2","5.15.104.3","5.15.104.4"]' >> "$GITHUB_OUTPUT"
           fi
 
@@ -83,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64, arm64]
+        arch: ${{ fromJSON(needs.prepare.outputs.arches) }}
         version: ${{ fromJSON(needs.prepare.outputs.versions) }}
     uses: ./.github/workflows/wsa-kernel.yml
     with:
