@@ -1,4 +1,4 @@
-name: Build Kernel - WSA
+name: Build Kernel - WSA selectable
 
 on:
   push:
