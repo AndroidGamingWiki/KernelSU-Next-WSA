@@ -111,6 +111,7 @@ jobs:
           fi
           declare -A ARCH_MAP=(["x86_64"]="x64" ["arm64"]="arm64")
           cp configs/wsa/config-wsa-${ARCH_MAP[${{ inputs.arch }}]} .config
+          scripts/config --enable KSU_X86_PATCH_SYSCALL_DISPATCHER
           make olddefconfig
           declare -A FILE_NAME=(["x86_64"]="bzImage" ["arm64"]="Image")
           make -j`nproc` LLVM=1 ARCH=${{ inputs.arch }} $(if [ "${{ inputs.arch }}" == "arm64" ]; then echo CROSS_COMPILE=aarch64-linux-gnu; fi) ${FILE_NAME[${{ inputs.arch }}]} CCACHE="/usr/bin/ccache" HOSTCC="gcc" HOSTCFLAGS="-O2 -fcommon"
